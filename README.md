@@ -1,5 +1,5 @@
 # Linux1_MiniFS
 
-##Запуск:
+## Запуск:
 ### make run
 ### ./main
