@@ -36,13 +36,6 @@ void createInode(int id, int parentId, int block, int type);
 struct Mapping createMapping (char name[MAX_LENGTH_FILE_NAME], int id);
 
 
-/*
- * Function:  getSuperBlock
- * -------------------------------------------------------------------------
- * 	Just get superblock struct from FS-file
- *
- *  returns: superblock
- */
 struct Superblock getSuperblock();
 
 
