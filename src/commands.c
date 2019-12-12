@@ -9,6 +9,10 @@
 #include <math.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 
 int do_open(int currentId, const char* pathname) {
@@ -301,19 +305,38 @@ int do_read(int id, int offset, void* buf, int count) {
     return accumulateRead;
 }
 
-void help() {
-    printf("HELP:\n");
-    printf("touch [filename] - create empty file\n");
-    printf("cat [filename] - print the file on the standart output\n");
-    printf("wrtapp [filename] [string] - write string to the end of the file.\n");
-    printf("ls - list directory contents\n");
-    printf("cd [dirname] - change the working directory\n");
-    printf("mkdir [dirname] - make directories\n");
-    printf("help - show information");
+void help(int sock) {
+
+    char sendBuff[1000];
+    memset(sendBuff, '\0', sizeof(sendBuff));
+
+    snprintf(sendBuff + strlen(sendBuff), strlen("HELP:\n")+1, "%s", "HELP:\n");
+
+    snprintf(sendBuff + strlen(sendBuff), strlen("touch [filename] - create empty file\n")+1, "%s",  "touch [filename] - create empty file\n");
+
+    snprintf(sendBuff + strlen(sendBuff),  strlen("cat [filename] - print the file on the standart output\n")+1,
+                    "%s\n",  "cat [filename] - print the file on the standart output\n");
+
+    snprintf(sendBuff + strlen(sendBuff),  strlen("wrtapp [filename] [string] - write string to the end of the file.\n")+1,
+                        "%s\n",  "wrtapp [filename] [string] - write string to the end of the file.\n");
+
+    snprintf(sendBuff + strlen(sendBuff),  strlen("ls - list directory contents\n")+1,
+                            "%s\n",  "ls - list directory contents\n");
+
+    snprintf(sendBuff + strlen(sendBuff),  strlen("cd [dirname] - change the working directory\n")+1,
+                            "%s\n",  "cd [dirname] - change the working directory\n");
+
+    snprintf(sendBuff + strlen(sendBuff),  strlen("mkdir [dirname] - make directories\n")+1,
+                                "%s\n",  "mkdir [dirname] - make directories\n");
+
+     snprintf(sendBuff + strlen(sendBuff),  strlen("help - show information\n")+1,
+                                     "%s\n",  "help - show information\n");
+      send(sock, sendBuff,  strlen(sendBuff)+1, 0);
+      return;
 }
 
 
-void do_touch(int currentDirId, char name[MAX_LENGTH_FILE_NAME]) {
+void do_touch(int currentDirId, char name[MAX_LENGTH_FILE_NAME], int sock) {
     //Check if there exist a file with the same name
     struct Inode currentDir = getInode(currentDirId);
     int offset = DATA_OFFSET + currentDir.direct[0] * BLOCK_SIZE;
@@ -323,7 +346,8 @@ void do_touch(int currentDirId, char name[MAX_LENGTH_FILE_NAME]) {
                            (void*)& mapping, sizeof(struct Mapping));
 
         if(strcmp(name, mapping.name) == 0) {
-            printf("A file with the same name exists.");
+            char* result = "A file with the same name exists.";
+            send(sock, result, strlen(result), 0);
             return;
         }
     }
@@ -353,10 +377,11 @@ void do_touch(int currentDirId, char name[MAX_LENGTH_FILE_NAME]) {
     writeFS(SB_OFFSET, (void*)& superblock, sizeof(struct Superblock));
 }
 
-void do_cat(int currentDirId, char name[MAX_LENGTH_FILE_NAME]) {
+void do_cat(int currentDirId, char name[MAX_LENGTH_FILE_NAME], int sock) {
     int id = do_open (currentDirId, name);
     if (id == -1) {
-        printf("File not found. ");
+        char* result = "File not found.";
+        send(sock, result, strlen(result), 0);
         return;
     }
     struct Inode inode = getInode(id);
@@ -364,19 +389,21 @@ void do_cat(int currentDirId, char name[MAX_LENGTH_FILE_NAME]) {
     int code = do_read(inode.id, 0, buf, inode.size);
 
     if (code == -1) {
-        printf("File is directory or the file does not exist.");
+        char* result = "File is directory or the file does not exist.";
+        send(sock, result, strlen(result), 0);
         return;
     } else {
-        printf("%s", buf);
+        send(sock, buf, strlen(buf), 0);
         return;
     }
 }
 
-void do_wrt_app(int currentDirId, char name[MAX_LENGTH_FILE_NAME], char text[MAX_LENGTH_TEXT]) {
+void do_wrt_app(int currentDirId, char name[MAX_LENGTH_FILE_NAME], char text[MAX_LENGTH_TEXT], int sock) {
     int num = do_open(currentDirId, name);
     struct Inode inode = getInode(num);
     if (num == -1) {
-        printf("File not found. ");
+        char* result = "File not found.";
+        send(sock, result, strlen(result), 0);
         return;
     }
 
@@ -384,9 +411,10 @@ void do_wrt_app(int currentDirId, char name[MAX_LENGTH_FILE_NAME], char text[MAX
 }
 
 
-void do_ls(int currentDirId) {
+void do_ls(int currentDirId, int sock) {
     struct Inode currentDir = getInode(currentDirId);
     int offset = DATA_OFFSET + currentDir.direct[0] * BLOCK_SIZE;
+    char *result = "";
     for (int i = 0; i < currentDir.numOfFiles; i++) {
         struct Mapping mapping;
         readFS(offset + i*sizeof(struct Mapping),
@@ -394,16 +422,34 @@ void do_ls(int currentDirId) {
 
         struct Inode tmp = getInode(mapping.id);
         if (tmp.numOfFiles == 0) {
-            printf("\033[22;34m %s \033[0m", mapping.name);
+            char* left = " \033[22;34m ";
+            char* right = " \033[0m";
+            int len = strlen(result) + strlen(left) + strlen(mapping.name) + strlen(right) + 1;
+            char* new_result = malloc(len);
+            strcpy(new_result, result);
+            strcat(new_result, left);
+            strcat(new_result, mapping.name);
+            strcat(new_result, right);
+            result = new_result;
         } else {
-            printf("\033[22;34m %s/ \033[0m", mapping.name);
+            char* left = "\033[22;34m ";
+            char* right = "/ \033[0m";
+            int len = strlen(result) + strlen(left) + strlen(mapping.name) + strlen(right) + 1;
+            char* new_result = malloc(len);
+            strcpy(new_result, result);
+            strcat(new_result, left);
+            strcat(new_result, mapping.name);
+            strcat(new_result, right);
+            result = new_result;
         }
     }
+    send(sock, result, strlen(result), 0);
 }
 
-int do_cd (int currentDirId, char name[MAX_LENGTH_FILE_NAME]) {
+int do_cd (int currentDirId, char name[MAX_LENGTH_FILE_NAME], int sock) {
     if (strcmp(name, "/") == 0) {
-        printf("Current directory is root");
+        char* result = "Current directory is root";
+        send(sock, result, strlen(result), 0);
         return 0;
     }
 
@@ -413,19 +459,26 @@ int do_cd (int currentDirId, char name[MAX_LENGTH_FILE_NAME]) {
 
     int temp = do_open(currentDirId, name);
     if (temp == -1) {
-        printf("Can't find path. ");
+        char* result = "Can't find path.";
+        send(sock, result, strlen(result), 0);
         return currentDirId;
     } else {
         if (getInode(temp).numOfFiles == 0) {
-            printf("This is not a directory.");
+            char* result = "This is not a directory.";
+            send(sock, result, strlen(result), 0);
             return currentDirId;
         }
-        printf("Current directory is %s", name);
+        char* left = "Current directory is ";
+        int len = strlen(left) + strlen(name) + 1;
+        char *result = malloc(len);
+        strcpy(result, left);
+        strcat(result, name);
+        send(sock, result, len, 0);
         return temp;
     }
 }
 
-void do_mkdir(int currentDirId, char name[MAX_LENGTH_FILE_NAME]) {
+void do_mkdir(int currentDirId, char name[MAX_LENGTH_FILE_NAME], int sock) {
     //Check if there exist a file with the same name
     struct Inode currentDir = getInode(currentDirId);
     int offset = DATA_OFFSET + currentDir.direct[0] * BLOCK_SIZE;
@@ -435,7 +488,8 @@ void do_mkdir(int currentDirId, char name[MAX_LENGTH_FILE_NAME]) {
                            (void*)& mapping, sizeof(struct Mapping));
 
         if(strcmp(name,mapping.name)==0) {
-            printf("A directory with the same name has been found");
+            char* result = "A directory with the same name has been found";
+            send(sock, result, strlen(result), 0);
             return;
         }
     }
@@ -463,4 +517,13 @@ void do_mkdir(int currentDirId, char name[MAX_LENGTH_FILE_NAME]) {
     superblock.nextAvailableInode = nextAvailableInode + 1;
     superblock.nextAvailableBlock = nextAvailableBlock + 1;
     writeFS(SB_OFFSET, (void*)& superblock, sizeof(struct Superblock));
+
+    char* left = "Directory ";
+    char* right = " was created";
+    int len = strlen(left) + strlen(name) + strlen(right) + 1;
+    char *result = malloc(len);
+    strcpy(result, left);
+    strcat(result, mapping.name);
+    strcat(result, right);
+    send(sock, result, len, 0);
 }

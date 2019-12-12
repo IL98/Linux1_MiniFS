@@ -7,4 +7,5 @@ run :
 	$(RM) initial
 	$(RM) initial.o
 
-	gcc -o main main.c ./src/filesystem.c  ./src/datastructures.c   ./src/commands.c
+	gcc -o server server.c ./src/filesystem.c  ./src/datastructures.c   ./src/commands.c
+	gcc -o client client.c
