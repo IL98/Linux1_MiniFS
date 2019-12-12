@@ -3,4 +3,5 @@
 ## Запуск:
  make run
 
-./main
+./server &
+./client
